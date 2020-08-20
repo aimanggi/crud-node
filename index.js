@@ -1,82 +1,98 @@
-const express = require("express");
-const cors = require("cors");
-const mongoose = require("mongoose");
-const bodyParser = require("body-parser");
+const express = require('express');
+const mongoose = require('mongoose');
+const cors = require('cors');
+const bodyParser = require('body-parser');
 
 const app = express();
-app.use(express.json())
+app.use(express.json()) // Send req body as json
 app.use(cors());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-mongoose.connect(
-  "mongodb+srv://root:root@cluster0.gfdvr.mongodb.net/test?retryWrites=true&w=majority",
-  {
+app.listen(3030, () => console.log('Server running on port 3030'))
+
+mongoose.connect('mongodb+srv://<dbname>:<password>@cluster0.gfdvr.mongodb.net/<databaseName>?retryWrites=true&w=majority', {
     useNewUrlParser: true,
     useUnifiedTopology: true,
     useFindAndModify: false,
-  }
-);
+})
 
-app.listen(3000, () => console.log("Running on port 3000"));
-
+// Create database schema
 const TodoSchema = new mongoose.Schema({
     title: String,
-    description: String,
+    username: String,
+    done: Boolean, 
 }, {
     timestamps: true,
 })
 
-const todoModel = mongoose.model('Todo', TodoSchema)
+// Register schema to database
+const todoModel = mongoose.model('newTodo', TodoSchema);
 
-app.get("/", async function (req, res) {
-  const todo = await todoModel.find({});
-  console.log("todo", todo);
-  try {
-    res.send(todo);
-  } catch (err) {
-    res.send(err);
-  }
-});
+// req: Request -> Header, Body (content)
+// res: Respond
 
-app.post("/new", async function (req, res) {
-  const newTodo = new todoModel(req.body);
-  console.log("req body", req.body);
-  try {
-    await newTodo.save();
-    res.send(newTodo);
-  } catch (err) {
-    res.send(err);
-  }
-});
+// Initial value for respond
+const initial = {
+    data: null,
+    error: null,
+}
 
-app.put("/edit/:id", async function (req, res) {
-    const updateTodo = await todoModel.findByIdAndUpdate(req.params.id, req.body);
-    console.log("req body", req.body);
-    console.log("upadate", updateTodo);
-
-    try {
-        await updateTodo.save();
-        const getUpdated = await todoModel.findById(req.params.id)
-        res.send(getUpdated)
-    } catch (err) {
-        res.send(err);
-    }
+app.get('/', (req, res) => {
+    res.send('Hello World')
 })
 
-app.delete("/delete/:id", async function (req, res) {
-    const deleteTodo = await todoModel.findByIdAndDelete(req.params.id);
-    console.log('delete todo', deleteTodo)
-    try {
-        if (!deleteTodo) {
-            throw new Error('No todo found!')
+// Read - All data
+app.get('/get-all', (req, res) => {
+    todoModel.find().then(data => {
+        console.log('data', data)
+        
+        initial.data = data // change data value to fetch result
+        res.send(initial)
+    })
+})
+
+// Read - get by Id
+app.get('/:id', (req, res) => {
+    todoModel.findById(req.params.id).then(data => {
+        console.log('data', data)
+        if(!data) {
+            initial.error = 'No todo found!' // change error value
+            res.send(initial)
         }
-        res.send('Todo Deleted');
-    } catch (err) {
-        console.log('err', err.message)
-        res.send(err.message);
-    }
+        initial.data = data
+        res.send(initial)
+    })
 })
 
+// Create
+app.post('/new', (req, res) => {
+   const createTodo = new todoModel(req.body)
+   createTodo.save().then(data => {
+       res.send(data)
+   })
+})
 
+// Edit
+app.put('/:id/edit', (req, res) => {
+    // find and update first then get the new data to send the respond
+    todoModel.findByIdAndUpdate(req.params.id, req.body).exec().then(() => {
+        todoModel.findById(req.params.id).then(data => {
+            res.send(data)
+        })
+    })
+})
 
-
+// Delete
+app.delete(`/:id/delete`, (req, res) => {
+    todoModel.findByIdAndDelete(req.params.id).then((data) => {
+        console.log('data', data)
+        if(!data) {
+            initial.error = 'No todo found!' // change error value
+            initial.data = null
+            res.send(initial)
+        }
+        initial.data = 'Todo deleted'
+        initial.error = null
+        res.send(initial)
+    })
+})
